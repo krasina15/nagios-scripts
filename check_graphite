@@ -8,7 +8,7 @@ require "json"
 EXIT_OK = 0
 EXIT_WARNING = 1
 EXIT_CRITICAL = 2
-EXIT_UNKNOWN = 3
+EXIT_UNKNOWN = 2
 
 @@options = {}
 
@@ -31,7 +31,6 @@ optparse = OptionParser.new do |opts|
   opts.on("-d", "--duration LENGTH", "Length, in minute of data to parse (default: 5)") do |duration|
     @@options[:duration] = duration
   end
-  @@options[:function] = "average"
   opts.on("-f", "--function \[average \| sum\]", "Function applied to metrics for thresholds (default: average)") do |function|
     @@options[:function] = function
   end
@@ -42,6 +41,14 @@ optparse = OptionParser.new do |opts|
   @@options[:critical] = nil
   opts.on("-c", "--critical VALUE", "Critical threshold") do |critical|
     @@options[:critical] = critical
+  end
+  @@options[:failzero] = 0.0
+  opts.on("-F", "--failtzero VALUE", "Failzero threshold, default 0.0") do |failzero|
+    @@options[:failzero] = failzero
+  end
+  @@options[:failzeroswitch] = false
+  opts.on("-E", "--failzeroswitch", "Enable failzero option") do |failzeroswitch|
+    @@options[:failzeroswitch] = failzeroswitch
   end
   @@options[:units] = nil
   opts.on("-U", "--units VALUE", "Adds a text tag to the metric count in the plugin output. Useful to identify the metric units. Doesn't affect data queries.") do |units|
@@ -65,9 +72,8 @@ optparse = OptionParser.new do |opts|
   end
 end
 
-optparse.parse!
-
-if (@@options[:url].nil? || @@options[:metric].nil? || @@options[:warning].nil? || @@options[:critical].nil?)
+if (@@options[:url].nil? || @@options[:metric].nil? || @@options[:warning].nil? || @@options[:
+critical].nil?)
   puts optparse
   exit 2
 end
@@ -82,11 +88,10 @@ end
 def output_url
   base_url = @@options[:url]
   metric = @@options[:metric]
-  if @@options[:link_graph]  
+  if @@options[:link_graph]
     "<a target=\"_blank\" href=\"http://" + base_url + "/render/?target=" + URI.escape(metric) + "&from=-24h&width=700&height=450\"> 24h graph </a>"
   end
-end  
-
+end
 
 data = {}
 data["total"] = 0
@@ -135,6 +140,9 @@ if (@@options[:critical].to_f > @@options[:warning].to_f)
   elsif (total >= @@options[:warning].to_f)
     puts "WARNING #{@@options[:message]} #{total}#{@@options[:units]} threshold: #{@@options[:warning]} #{output_url} #{perfdata}"
     exit EXIT_WARNING
+  elsif ((@@options[:failzeroswitch]) & (total == @@options[:failzero].to_f))
+       puts "FAILZERO #{@@options[:message]} #{total}#{@@options[:units]} threshold: #{@@options[:failzero]} #{output_url} #{perfdata}"
+       exit EXIT_CRITICAL
   else
     puts "OK #{@@options[:message]} #{total}#{@@options[:units]} #{output_url} #{perfdata}"
     exit EXIT_OK
@@ -146,9 +154,11 @@ else
   elsif (total <= @@options[:warning].to_f)
     puts "WARNING #{@@options[:message]} #{total}#{@@options[:units]} threshold: #{@@options[:warning]} #{output_url} #{perfdata}"
     exit EXIT_WARNING
+  elsif ((@@options[:failzeroswitch]) & (total == @@options[:failzero].to_f))
+    puts "FAILZERO #{@@options[:message]} #{total}#{@@options[:units]} threshold: #{@@options[:failzero]} #{output_url} #{perfdata}"
+    exit EXIT_CRITICAL
   else
     puts "OK #{@@options[:message]} #{total}#{@@options[:units]} #{output_url} #{perfdata}"
     exit EXIT_OK
   end
 end
-
